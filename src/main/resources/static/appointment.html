@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>心理专家预约</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+<div class="max-w-3xl mx-auto mt-10 p-6 bg-white rounded-2xl shadow-lg">
+  <h1 class="text-2xl font-bold mb-6 text-center">📅 心理专家预约</h1>
+
+  <!-- 预约表单 -->
+  <form id="appointment-form" class="space-y-4 max-w-md mx-auto">
+    <div>
+      <label class="block mb-1 font-semibold" for="name">姓名</label>
+      <input type="text" id="name" name="name" required
+             class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+    <div>
+      <label class="block mb-1 font-semibold" for="email">邮箱</label>
+      <input type="email" id="email" name="email" required
+             class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+    <div>
+      <label class="block mb-1 font-semibold" for="date">日期</label>
+      <input type="date" id="date" name="date" required
+             class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+    <div>
+      <label class="block mb-1 font-semibold" for="time">时间段</label>
+      <select id="time" name="time" required
+              class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">请选择时间段</option>
+        <option value="8:00-9:00">8:00-9:00</option>
+        <option value="9:00-10:00">9:00-10:00</option>
+        <option value="10:00-11:00">10:00-11:00</option>
+        <option value="14:00-15:00">14:00-15:00</option>
+        <option value="15:00-16:00">15:00-16:00</option>
+        <option value="16:00-17:00">16:00-17:00</option>
+      </select>
+    </div>
+    <div>
+      <label class="block mb-1 font-semibold" for="reason">预约原因</label>
+      <textarea id="reason" name="reason" rows="3"
+                class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="简述您的心理疾病症状"></textarea>
+    </div>
+    <button type="submit"
+            class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">提交预约</button>
+  </form>
+
+  <hr class="my-8" />
+
+  <!-- 预约列表 -->
+  <h2 class="text-xl font-semibold mb-4 text-center">已预约列表</h2>
+  <table class="min-w-full border border-gray-300 rounded-md overflow-hidden">
+    <thead class="bg-gray-200">
+    <tr>
+      <th class="py-2 px-4 border-r border-gray-300">姓名</th>
+      <th class="py-2 px-4 border-r border-gray-300">邮箱</th>
+      <th class="py-2 px-4 border-r border-gray-300">日期</th>
+      <th class="py-2 px-4 border-r border-gray-300">时间段</th>
+      <th class="py-2 px-4 border-r border-gray-300">原因</th>
+      <th class="py-2 px-4">操作</th>
+    </tr>
+    </thead>
+    <tbody id="appointments-list">
+    <tr><td colspan="6" class="text-center py-4 text-gray-400">加载中...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const form = document.getElementById('appointment-form');
+  const list = document.getElementById('appointments-list');
+
+  // 加载已有预约数据
+  async function loadAppointments() {
+    try {
+      const res = await fetch('/api/appointments');
+      if (!res.ok) throw new Error('获取预约失败');
+      const data = await res.json();
+      if (!data.length) {
+        list.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-400">暂无预约记录</td></tr>';
+        return;
+      }
+      list.innerHTML = data.map(a => `
+          <tr class="border-t border-gray-300 hover:bg-gray-50">
+            <td class="py-2 px-4 border-r border-gray-300">${a.name}</td>
+            <td class="py-2 px-4 border-r border-gray-300">${a.email}</td>
+            <td class="py-2 px-4 border-r border-gray-300">${a.date}</td>
+            <td class="py-2 px-4 border-r border-gray-300">${a.time}</td>
+            <td class="py-2 px-4 border-r border-gray-300 whitespace-pre-wrap">${a.reason || ''}</td>
+            <td class="py-2 px-4 text-center">
+              <button data-id="${a.id}" class="delete-btn bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded">删除</button>
+            </td>
+          </tr>
+        `).join('');
+    } catch (e) {
+      list.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">加载失败：${e.message}</td></tr>`;
+    }
+  }
+
+  // 删除预约
+  async function deleteAppointment(id) {
+    if (!confirm('确定删除此预约吗？')) return;
+    try {
+      const res = await fetch(`/api/appointments/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('删除失败');
+      await loadAppointments();
+    } catch (e) {
+      alert('删除失败: ' + e.message);
+    }
+  }
+
+  // 表单提交
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const formData = new FormData(form);
+    const appointment = {};
+    for (const [key, val] of formData.entries()) {
+      appointment[key] = val.trim();
+    }
+    if (!appointment.name || !appointment.email || !appointment.date || !appointment.time) {
+      alert('请填写完整姓名、邮箱、日期和时间段');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(appointment)
+      });
+      if (!res.ok) throw new Error('提交失败');
+      alert('预约成功');
+      form.reset();
+      await loadAppointments();
+    } catch (e) {
+      alert('提交失败: ' + e.message);
+    }
+  });
+
+  // 事件委托删除按钮
+  list.addEventListener('click', e => {
+    if (e.target.classList.contains('delete-btn')) {
+      const id = e.target.dataset.id;
+      deleteAppointment(id);
+    }
+  });
+
+  loadAppointments();
+</script>
+</body>
+</html>

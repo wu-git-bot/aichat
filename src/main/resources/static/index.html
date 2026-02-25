@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8" />
+    <title>心理咨询师对话</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+<div class="max-w-xl mx-auto mt-10 p-6 bg-white rounded-2xl shadow-lg">
+    <h1 class="text-2xl font-bold mb-4">🧠 心理咨询师对话</h1>
+    <a href="/admin.html" class="text-sm text-blue-500 hover:underline mb-4 inline-block">管理员入口</a>
+
+    <div id="chat-box" class="space-y-2 mb-4 h-64 overflow-y-auto border p-2 rounded-md bg-gray-50 text-sm">
+        <div class="text-gray-400 italic">请开始你的提问~</div>
+    </div>
+
+    <form id="chat-form" class="flex gap-2">
+        <input id="message" type="text" placeholder="请输入你的问题..." class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off" />
+        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">发送</button>
+    </form>
+
+    <div class="mt-6 text-center">
+        <a href="/appointment.html" class="text-blue-600 hover:underline font-medium"> 去专家预约页面</a>
+    </div>
+</div>
+
+<script>
+    const chatForm = document.getElementById("chat-form");
+    const messageInput = document.getElementById("message");
+    const chatBox = document.getElementById("chat-box");
+
+    chatForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const message = messageInput.value.trim();
+        if (!message) return;
+
+        appendMessage("🙋 你", message);
+        messageInput.value = "";
+
+        const eventSource = new EventSource(`/ai/bailian/agent/stream?message=${encodeURIComponent(message)}`);
+
+        let botReply = "";
+        let closedByServer = false;
+
+        // 添加机器人回复占位符，后续更新内容
+        appendMessage("🤖 心理咨询师", "...");
+
+        // 获取最新机器人消息div，方便更新
+        const messages = chatBox.querySelectorAll("div");
+        const lastBotMessage = messages[messages.length - 1];
+
+        eventSource.onmessage = function(event) {
+            if (!event.data || event.data.trim() === "") return;
+            botReply += event.data;
+            lastBotMessage.innerHTML = `<strong>心理咨询师:</strong> <span class="whitespace-pre-wrap">${botReply}</span>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        };
+
+        // 如果服务器支持发送自定义事件“end”，可用如下：
+        // eventSource.addEventListener('end', function(event) {
+        //     closedByServer = true;
+        //     eventSource.close();
+        // });
+
+        eventSource.onerror = function() {
+            if (!closedByServer) {
+                // 不要重复添加错误提示，且最后一次回复已经显示了答案
+                // 这里不显示“连接失败”，避免误导
+            }
+            eventSource.close();
+        };
+    });
+
+    function appendMessage(sender, text) {
+        const div = document.createElement("div");
+        div.innerHTML = `<strong>${sender}:</strong> <span class="whitespace-pre-wrap">${text}</span>`;
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+</body>
+</html>
