@@ -1,88 +1,233 @@
 package com.example.apichat;
 
-import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.web.bind.annotation.*;
 
-import java.io.*;
-import java.nio.file.*;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/appointments")
 public class AppointmentController {
 
-    private final Path csvPath = Paths.get("D:\\jdk17\\apichat\\src\\main\\resources\\data\\appointments.csv");
-    private final AtomicInteger idCounter = new AtomicInteger(3); // 从3开始，自增
+    private static final List<String> TIME_SLOTS = List.of(
+            "8:00-9:00",
+            "9:00-10:00",
+            "10:00-11:00",
+            "14:00-15:00",
+            "15:00-16:00",
+            "16:00-17:00"
+    );
 
+    private final AppointmentRepository appointmentRepository;
+    private final ExpertScheduleRepository expertScheduleRepository;
+
+    public AppointmentController(AppointmentRepository appointmentRepository,
+                                 ExpertScheduleRepository expertScheduleRepository) {
+        this.appointmentRepository = appointmentRepository;
+        this.expertScheduleRepository = expertScheduleRepository;
+    }
 
     @GetMapping
-    public List<Map<String, String>> getAllAppointments() throws IOException {//输出预约信息
-        if (!Files.exists(csvPath)) return new ArrayList<>();
-        List<String> lines = Files.readAllLines(csvPath);
-        return lines.stream()
-                .skip(1)
-                .map(line -> {
-                    String[] parts = line.split(",", -1);
-                    Map<String, String> map = new LinkedHashMap<>();
-                    map.put("id", parts[0]);
-                    map.put("name", parts[1]);
-                    map.put("email", parts[2]);
-                    map.put("date", parts[3]);
-                    map.put("time", parts[4]);
-                    map.put("reason", parts[5]);
-                    return map;
-                }).collect(Collectors.toList());
+    public List<Map<String, String>> getAllAppointments() {
+        return appointmentRepository.findAll().stream()
+                .sorted(Comparator.comparing(AppointmentEntity::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(this::toMap)
+                .collect(Collectors.toList());
     }
 
     @PostMapping
-    public ResponseEntity<String> createAppointment(@RequestBody Map<String, String> appointment) throws IOException {
-        if (!Files.exists(csvPath)) {
-            Files.write(csvPath, Collections.singletonList("id,name,email,date,time,reason"));
+    public ResponseEntity<?> createAppointment(@RequestBody Map<String, String> appointment) {
+        String selectedDate = appointment.getOrDefault("date", "").trim();
+        String selectedTime = appointment.getOrDefault("time", "").trim();
+        String requestedExpert = appointment.getOrDefault("expert", "").trim();
+
+        if (selectedDate.isEmpty() || selectedTime.isEmpty()) {
+            return ResponseEntity.badRequest().body("date/time required");
         }
 
-        // 检查是否重复预约：日期+时间段
-        List<String> lines = Files.readAllLines(csvPath);
-        String selectedDate = appointment.get("date");
-        String selectedTime = appointment.get("time");
-
-        for (String line : lines.subList(1, lines.size())) { // 跳过表头
-            String[] parts = line.split(",", -1);
-            String date = parts[3];
-            String time = parts[4];
-            if (selectedDate.equals(date) && selectedTime.equals(time)) {
-                return ResponseEntity.status(409).body("提交失败");
-            }
+        LocalDate date;
+        try {
+            date = LocalDate.parse(selectedDate);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("invalid date format, expected yyyy-MM-dd");
         }
 
-        // 写入新预约
-        int id = idCounter.getAndIncrement();
-        String line = String.format("%d,%s,%s,%s,%s,%s",
-                id,
-                appointment.get("name"),
-                appointment.get("email"),
-                selectedDate,
-                selectedTime,
-                appointment.get("reason"));
-        Files.write(csvPath, Collections.singletonList(line), StandardOpenOption.APPEND);
-        return ResponseEntity.ok("预约成功！");
+        String expert = pickExpert(date, selectedTime, requestedExpert);
+        if (expert == null || expert.isBlank()) {
+            Map<String, Object> conflict = new LinkedHashMap<>();
+            conflict.put("message", "No available expert for this slot");
+            conflict.put("suggestions", recommendSlots(date, selectedTime, requestedExpert, 3));
+            return ResponseEntity.status(409).body(conflict);
+        }
+
+        if (appointmentRepository.findByDateAndTimeAndExpertAndStatus(date, selectedTime, expert, "BOOKED").isPresent()) {
+            Map<String, Object> conflict = new LinkedHashMap<>();
+            conflict.put("message", "Appointment slot already booked");
+            conflict.put("suggestions", recommendSlots(date, selectedTime, requestedExpert, 3));
+            return ResponseEntity.status(409).body(conflict);
+        }
+
+        AppointmentEntity entity = new AppointmentEntity();
+        entity.setName(appointment.getOrDefault("name", "").trim());
+        entity.setEmail(appointment.getOrDefault("email", "").trim());
+        entity.setDate(date);
+        entity.setTime(selectedTime);
+        entity.setReason(appointment.getOrDefault("reason", "").trim());
+        entity.setExpert(expert);
+        entity.setStatus("BOOKED");
+        entity.setCreatedAt(LocalDateTime.now());
+        entity.setUpdatedAt(LocalDateTime.now());
+        appointmentRepository.save(entity);
+        return ResponseEntity.ok("Appointment created");
     }
 
+    @PutMapping("/{id}/reschedule")
+    public ResponseEntity<?> reschedule(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        AppointmentEntity entity = appointmentRepository.findById(id).orElse(null);
+        if (entity == null) return ResponseEntity.notFound().build();
+        if (!"BOOKED".equals(entity.getStatus())) {
+            return ResponseEntity.badRequest().body("only BOOKED appointment can be rescheduled");
+        }
+
+        String dateStr = body.getOrDefault("date", "").trim();
+        String time = body.getOrDefault("time", "").trim();
+        String requestedExpert = body.getOrDefault("expert", entity.getExpert()).trim();
+
+        LocalDate date;
+        try {
+            date = LocalDate.parse(dateStr);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("invalid date format, expected yyyy-MM-dd");
+        }
+
+        String expert = pickExpert(date, time, requestedExpert);
+        if (expert == null || expert.isBlank()) {
+            Map<String, Object> conflict = new LinkedHashMap<>();
+            conflict.put("message", "No available expert for this slot");
+            conflict.put("suggestions", recommendSlots(date, time, requestedExpert, 3));
+            return ResponseEntity.status(409).body(conflict);
+        }
+
+        boolean occupied = appointmentRepository.findByDateAndTimeAndExpertAndStatus(date, time, expert, "BOOKED")
+                .filter(a -> !Objects.equals(a.getId(), id)).isPresent();
+        if (occupied) {
+            Map<String, Object> conflict = new LinkedHashMap<>();
+            conflict.put("message", "Appointment slot already booked");
+            conflict.put("suggestions", recommendSlots(date, time, requestedExpert, 3));
+            return ResponseEntity.status(409).body(conflict);
+        }
+
+        entity.setDate(date);
+        entity.setTime(time);
+        entity.setExpert(expert);
+        entity.setUpdatedAt(LocalDateTime.now());
+        appointmentRepository.save(entity);
+        return ResponseEntity.ok("Appointment rescheduled");
+    }
+
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<?> cancel(@PathVariable Long id) {
+        AppointmentEntity entity = appointmentRepository.findById(id).orElse(null);
+        if (entity == null) return ResponseEntity.notFound().build();
+        entity.setStatus("CANCELED");
+        entity.setUpdatedAt(LocalDateTime.now());
+        appointmentRepository.save(entity);
+        return ResponseEntity.ok("Appointment canceled");
+    }
+
+    @GetMapping("/suggestions")
+    public ResponseEntity<List<Map<String, String>>> suggestions(
+            @RequestParam("date") String dateStr,
+            @RequestParam(value = "fromTime", required = false, defaultValue = "") String fromTime,
+            @RequestParam(value = "expert", required = false, defaultValue = "") String expert) {
+        LocalDate date;
+        try {
+            date = LocalDate.parse(dateStr);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(recommendSlots(date, fromTime, expert, 3));
+    }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteAppointment(@PathVariable String id) throws IOException {//删除预约信息
-        if (!Files.exists(csvPath)) return ResponseEntity.notFound().build();
-        List<String> lines = Files.readAllLines(csvPath);
-        List<String> updated = new ArrayList<>();
-        updated.add(lines.get(0)); // header
-        for (int i = 1; i < lines.size(); i++) {
-            if (!lines.get(i).startsWith(id + ",")) {
-                updated.add(lines.get(i));
+    public ResponseEntity<String> deleteAppointment(@PathVariable Long id) {
+        if (!appointmentRepository.existsById(id)) return ResponseEntity.notFound().build();
+        appointmentRepository.deleteById(id);
+        return ResponseEntity.ok("Appointment deleted");
+    }
+
+    private String pickExpert(LocalDate date, String time, String requestedExpert) {
+        List<ExpertScheduleEntity> schedules = expertScheduleRepository.findByDateAndEnabled(date, true).stream()
+                .filter(s -> time.equals(s.getTime()))
+                .collect(Collectors.toList());
+
+        if (schedules.isEmpty()) {
+            String fallback = (requestedExpert != null && !requestedExpert.isBlank()) ? requestedExpert : "系统分配";
+            boolean free = appointmentRepository
+                    .findByDateAndTimeAndExpertAndStatus(date, time, fallback, "BOOKED")
+                    .isEmpty();
+            return free ? fallback : null;
+        }
+
+        List<String> candidates = schedules.stream().map(ExpertScheduleEntity::getExpert).distinct().toList();
+
+        if (requestedExpert != null && !requestedExpert.isBlank()) {
+            if (!candidates.contains(requestedExpert)) return null;
+            boolean free = appointmentRepository
+                    .findByDateAndTimeAndExpertAndStatus(date, time, requestedExpert, "BOOKED")
+                    .isEmpty();
+            return free ? requestedExpert : null;
+        }
+
+        for (String expert : candidates) {
+            boolean free = appointmentRepository
+                    .findByDateAndTimeAndExpertAndStatus(date, time, expert, "BOOKED")
+                    .isEmpty();
+            if (free) return expert;
+        }
+        return null;
+    }
+
+    private List<Map<String, String>> recommendSlots(LocalDate startDate, String fromTime, String preferredExpert, int limit) {
+        List<Map<String, String>> result = new ArrayList<>();
+        int fromIdx = fromTime == null || fromTime.isBlank() ? 0 : Math.max(TIME_SLOTS.indexOf(fromTime) + 1, 0);
+
+        for (int dayOffset = 0; dayOffset < 14 && result.size() < limit; dayOffset++) {
+            LocalDate date = startDate.plusDays(dayOffset);
+            int begin = dayOffset == 0 ? fromIdx : 0;
+            for (int i = begin; i < TIME_SLOTS.size() && result.size() < limit; i++) {
+                String slot = TIME_SLOTS.get(i);
+                String expert = pickExpert(date, slot, preferredExpert);
+                if (expert != null) {
+                    Map<String, String> item = new LinkedHashMap<>();
+                    item.put("date", String.valueOf(date));
+                    item.put("time", slot);
+                    item.put("expert", expert);
+                    result.add(item);
+                }
             }
         }
-        Files.write(csvPath, updated, StandardOpenOption.TRUNCATE_EXISTING);
-        return ResponseEntity.ok("已删除");
+        return result;
+    }
+
+    private Map<String, String> toMap(AppointmentEntity entity) {
+        Map<String, String> map = new LinkedHashMap<>();
+        map.put("id", String.valueOf(entity.getId()));
+        map.put("name", entity.getName());
+        map.put("email", entity.getEmail());
+        map.put("date", String.valueOf(entity.getDate()));
+        map.put("time", entity.getTime());
+        map.put("reason", entity.getReason());
+        map.put("expert", entity.getExpert());
+        map.put("status", entity.getStatus());
+        return map;
     }
 }

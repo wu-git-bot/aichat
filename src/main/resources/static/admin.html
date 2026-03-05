@@ -1,61 +1,76 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
   <title>管理员登录</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // 页面加载前校验管理员登录
+    (function () {
+      const token = localStorage.getItem('authToken');
+      const role = localStorage.getItem('authRole');
+      if (!token) {
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/login.html?next=${next}`;
+      } else if (role !== 'ROLE_ADMIN') {
+        alert('需要管理员权限，已跳转到登录页');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authRole');
+        window.location.href = `/login.html?next=/admin.html`;
+      }
+    })();
+  </script>
 </head>
 <body class="bg-gray-100 p-10 text-gray-900">
 <div class="max-w-xl mx-auto bg-white shadow-lg p-6 rounded-lg">
-  <h1 class="text-2xl font-bold mb-4">🔐 管理员登录</h1>
+  <h1 class="text-2xl font-bold mb-4">管理员登录</h1>
 
-  <div id="login-form">
-    <input id="username" type="text" placeholder="用户名" class="w-full border p-2 mb-2 rounded" />
-    <input id="password" type="password" placeholder="密码" class="w-full border p-2 mb-2 rounded" />
-    <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded">登录</button>
+  <div class="flex items-center justify-between mb-4 text-sm">
+    <span id="status" class="text-gray-600"></span>
+    <button id="logout-btn" class="text-red-500 hover:underline">退出登录</button>
   </div>
 
-  <div id="appointments" class="mt-6 hidden">
-    <h2 class="text-xl font-bold mb-2">📋 预约列表</h2>
+  <div id="appointments" class="mt-6">
+    <h2 class="text-xl font-bold mb-2">预约列表</h2>
     <ul id="appointment-list" class="text-sm space-y-2"></ul>
   </div>
 </div>
 
 <script>
-  function login() {
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
+  const TOKEN_KEY = 'authToken';
+  const ROLE_KEY = 'authRole';
 
-    fetch('/admin/login', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({username, password})
-    })
-            .then(res => {
-              if (!res.ok) throw new Error("登录失败");
-              return res.text();
-            })
-            .then(() => {
-              document.getElementById("login-form").classList.add("hidden");
-              document.getElementById("appointments").classList.remove("hidden");
-              loadAppointments();
-            })
-            .catch(err => alert(err.message));
+  const statusEl = document.getElementById('status');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  function authHeaders() {
+    const token = localStorage.getItem(TOKEN_KEY);
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
   }
 
-  function loadAppointments() {
-    fetch('/admin/appointments')
-            .then(res => res.json())
-            .then(data => {
-              const list = document.getElementById("appointment-list");
-              list.innerHTML = "";
-              data.forEach(app => {
-                const li = document.createElement("li");
-                li.textContent = `人员 ${app.name} | 邮箱 ${app.email} | 日期 ${app.date} ${app.time} | 情况 ${app.reason}`;
-                list.appendChild(li);
-              });
-            });
+  async function loadAppointments() {
+    const res = await fetch('/admin/appointments', { headers: authHeaders() });
+    if (!res.ok) {
+      statusEl.textContent = '加载预约失败';
+      return;
+    }
+
+    const data = await res.json();
+    const list = document.getElementById('appointment-list');
+    list.innerHTML = '';
+    data.forEach(app => {
+      const li = document.createElement('li');
+      li.textContent = `人员 ${app.name} | 邮箱 ${app.email} | 日期 ${app.date} ${app.time} | 情况 ${app.reason}`;
+      list.appendChild(li);
+    });
   }
+
+  logoutBtn.addEventListener('click', () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ROLE_KEY);
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/login.html?next=${next}`;
+  });
 </script>
 </body>
 </html>

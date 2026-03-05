@@ -9,5 +9,5 @@ class ApichatApplicationTests {
     @Test
     void contextLoads() {
     }
-}
 
+}

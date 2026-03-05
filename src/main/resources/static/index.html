@@ -1,82 +1,313 @@
-<!DOCTYPE html>
-<html lang="zh">
+<!doctype html>
+<html lang="zh-CN">
 <head>
-    <meta charset="UTF-8" />
-    <title>心理咨询师对话</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>心理咨询助手</title>
+  <style>
+    :root { --bg:#f4f6fb; --panel:#fff; --line:#d7e0ea; --text:#1f2937; --muted:#6b7280; --brand:#2563eb; --danger:#dc2626; --warn:#d97706; --ok:#059669; --side1:#0f172a; --side2:#1e293b; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:"Microsoft YaHei",Segoe UI,Arial,sans-serif}
+    .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+    .side{background:linear-gradient(180deg,var(--side1),var(--side2));padding:16px;color:#e2e8f0}
+    .brand{font-size:20px;font-weight:700;margin-bottom:6px}.sub{font-size:12px;color:#93c5fd;margin-bottom:12px}
+    .menu{display:flex;flex-direction:column;gap:8px}
+    .nav{border:1px solid rgba(148,163,184,.45);background:rgba(15,23,42,.5);color:#e2e8f0;border-radius:10px;padding:9px 10px;text-align:left;cursor:pointer}
+    .nav.active{background:linear-gradient(90deg,#2563eb,#0284c7);border-color:transparent}
+    .main{padding:16px}
+    .top{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+    .panel{display:none;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:12px}
+    .panel.active{display:block}
+    .muted{color:var(--muted);font-size:13px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    input,select,textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+    .btn{border:0;border-radius:8px;padding:8px 10px;font-weight:600;cursor:pointer}
+    .primary{background:var(--brand);color:#fff}.danger{background:var(--danger);color:#fff}.warn{background:var(--warn);color:#fff}
+    .pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:#f8fafc;font-size:12px}
+    .ok{color:var(--ok)}.err{color:var(--danger)}
+    .chat{height:320px;border:1px solid var(--line);border-radius:10px;background:#f8fafc;padding:10px;overflow:auto}
+    table{width:100%;border-collapse:collapse;font-size:14px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top} th{background:#f1f5f9}
+    .section{margin-top:14px;padding-top:10px;border-top:1px dashed var(--line)}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}.menu{flex-direction:row;flex-wrap:wrap}.nav{flex:1 1 calc(50% - 8px)}}
+  </style>
 </head>
-<body class="bg-gray-100 text-gray-900">
-<div class="max-w-xl mx-auto mt-10 p-6 bg-white rounded-2xl shadow-lg">
-    <h1 class="text-2xl font-bold mb-4">🧠 心理咨询师对话</h1>
-    <a href="/admin.html" class="text-sm text-blue-500 hover:underline mb-4 inline-block">管理员入口</a>
-
-    <div id="chat-box" class="space-y-2 mb-4 h-64 overflow-y-auto border p-2 rounded-md bg-gray-50 text-sm">
-        <div class="text-gray-400 italic">请开始你的提问~</div>
+<body>
+<div class="layout">
+  <aside class="side">
+    <div class="brand">心理咨询助手</div>
+    <div class="sub">对话 / 知识库 / 预约 / 管理</div>
+    <div class="menu">
+      <button class="nav active" data-view="chat">对话</button>
+      <button class="nav" data-view="kb">知识库</button>
+      <button class="nav" data-view="book">预约</button>
+      <button class="nav" data-view="admin">管理员</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <div>
+        <div id="authStatus">未登录</div>
+        <div class="muted">对话、知识库、预约接口都需要登录态。</div>
+      </div>
+      <button id="logoutBtn" class="btn danger" type="button">退出登录</button>
     </div>
 
-    <form id="chat-form" class="flex gap-2">
-        <input id="message" type="text" placeholder="请输入你的问题..." class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off" />
-        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">发送</button>
-    </form>
+    <section id="p-chat" class="panel active">
+      <h2>流式对话</h2>
+      <div class="muted">如果模型配置异常，会在对话区显示后端真实错误。</div>
+      <div id="chatBox" class="chat">欢迎使用心理咨询助手。</div>
+      <div class="row" style="margin:10px 0">
+        <label class="pill"><input id="useRag" type="checkbox" style="width:auto;margin-right:6px">使用知识库流式回答</label>
+      </div>
+      <form id="chatForm" class="row">
+        <input id="msg" type="text" placeholder="请输入消息..." style="flex:1;min-width:220px">
+        <button class="btn primary" type="submit">发送</button>
+      </form>
+    </section>
 
-    <div class="mt-6 text-center">
-        <a href="/appointment.html" class="text-blue-600 hover:underline font-medium"> 去专家预约页面</a>
-    </div>
+    <section id="p-kb" class="panel">
+      <h2>知识库</h2>
+      <div class="row" style="align-items:center;margin-bottom:8px">
+        <input id="kbFile" type="file" accept=".txt,.md">
+        <button id="kbUpload" class="btn warn" type="button">上传文档</button>
+        <span id="kbStatus" class="pill">待上传</span>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <span class="pill">文档数: <b id="docCnt" style="margin-left:6px">0</b></span>
+        <span class="pill">Chunk数: <b id="chunkCnt" style="margin-left:6px">0</b></span>
+      </div>
+      <table>
+        <thead><tr><th>ID</th><th>文件</th><th>Chunk</th><th>更新时间</th><th>操作</th></tr></thead>
+        <tbody id="docList"><tr><td colspan="5" class="muted">暂无数据</td></tr></tbody>
+      </table>
+    </section>
+
+    <section id="p-book" class="panel">
+      <h2>预约专家</h2>
+      <div class="row" style="margin-bottom:8px">
+        <input id="apName" placeholder="姓名">
+        <input id="apEmail" type="email" placeholder="邮箱">
+        <input id="apDate" type="date">
+        <select id="apTime">
+          <option value="">选择时段</option>
+          <option>8:00-9:00</option><option>9:00-10:00</option><option>10:00-11:00</option>
+          <option>14:00-15:00</option><option>15:00-16:00</option><option>16:00-17:00</option>
+        </select>
+        <input id="apExpert" placeholder="专家（可选）">
+      </div>
+      <textarea id="apReason" rows="3" placeholder="预约原因"></textarea>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <button id="apSubmit" class="btn primary" type="button">提交预约</button>
+        <span id="apStatus" class="pill">待提交</span>
+      </div>
+      <div id="apSuggest" class="muted" style="margin-top:8px"></div>
+      <div style="overflow:auto;margin-top:10px">
+        <table>
+          <thead><tr><th>姓名</th><th>专家</th><th>日期</th><th>时段</th><th>状态</th><th>原因</th><th>操作</th></tr></thead>
+          <tbody id="apList"><tr><td colspan="7" class="muted">暂无数据</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="p-admin" class="panel">
+      <h2>管理员控制台</h2>
+      <div id="adminTip" class="muted">只有 ROLE_ADMIN 可访问本页面。</div>
+      <div id="healthBox" style="margin-top:8px"></div>
+
+      <div class="section">
+        <h3 style="margin:0 0 8px">专家排班</h3>
+        <div class="row">
+          <input id="schExpert" placeholder="专家姓名">
+          <input id="schDate" type="date">
+          <select id="schTime">
+            <option value="">选择时段</option>
+            <option>8:00-9:00</option><option>9:00-10:00</option><option>10:00-11:00</option>
+            <option>14:00-15:00</option><option>15:00-16:00</option><option>16:00-17:00</option>
+          </select>
+          <button id="schAdd" class="btn primary" type="button">新增排班</button>
+        </div>
+        <div style="overflow:auto;margin-top:8px">
+          <table>
+            <thead><tr><th>ID</th><th>专家</th><th>日期</th><th>时段</th><th>启用</th><th>操作</th></tr></thead>
+            <tbody id="schList"><tr><td colspan="6" class="muted">暂无数据</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 style="margin:0 0 8px">预约情况</h3>
+        <div class="row" style="margin-bottom:8px">
+          <button id="adminApRefresh" class="btn primary" type="button">刷新预约列表</button>
+        </div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>ID</th><th>姓名</th><th>邮箱</th><th>日期</th><th>时段</th><th>专家</th><th>状态</th><th>原因</th></tr></thead>
+            <tbody id="adminApList"><tr><td colspan="8" class="muted">暂无数据</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 style="margin:0 0 8px">报表中心</h3>
+        <div class="row" style="margin-bottom:8px">
+          <button id="reportRefresh" class="btn primary" type="button">刷新报表</button>
+          <span class="pill">聊天数: <b id="rpChat" style="margin-left:6px">0</b></span>
+          <span class="pill">预约数: <b id="rpBooked" style="margin-left:6px">0</b></span>
+          <span class="pill">转化率: <b id="rpRate" style="margin-left:6px">0%</b></span>
+        </div>
+        <div class="row">
+          <div style="flex:1;min-width:260px">
+            <div class="muted" style="margin-bottom:6px">近7天趋势</div>
+            <table><thead><tr><th>日期</th><th>预约</th><th>取消</th></tr></thead><tbody id="rpTrend"></tbody></table>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <div class="muted" style="margin-bottom:6px">高频预约原因</div>
+            <table><thead><tr><th>原因</th><th>次数</th></tr></thead><tbody id="rpReasons"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 </div>
 
 <script>
-    const chatForm = document.getElementById("chat-form");
-    const messageInput = document.getElementById("message");
-    const chatBox = document.getElementById("chat-box");
+  const TOKEN_KEY = "authToken", ROLE_KEY = "authRole";
+  const views = {chat:el("p-chat"), kb:el("p-kb"), book:el("p-book"), admin:el("p-admin")};
+  const navs = [...document.querySelectorAll(".nav")];
 
-    chatForm.addEventListener("submit", function (e) {
-        e.preventDefault();
-        const message = messageInput.value.trim();
-        if (!message) return;
+  function el(id){return document.getElementById(id);}
+  function token(){return localStorage.getItem(TOKEN_KEY);}
+  function role(){return localStorage.getItem(ROLE_KEY);}
+  function authHeaders(json){const h=token()?{Authorization:"Bearer "+token()}:{}; if(json)h["Content-Type"]="application/json"; return h;}
+  function esc(t){const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML;}
+  function goLogin(){localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(ROLE_KEY); const n=encodeURIComponent(location.pathname+location.search); location.href="/login.html?next="+n;}
+  function setAuth(){el("authStatus").textContent=role()?("已登录: "+role()):"未登录";}
+  function append(sender,text){const line=document.createElement("div"); line.innerHTML="<strong>"+esc(sender)+":</strong> "+esc(text); const box=el("chatBox"); box.appendChild(line); box.scrollTop=box.scrollHeight;}
+  async function api(url,opt){const r=await fetch(url,opt); if(r.status===401||r.status===403){setTimeout(goLogin,100); return {ok:false,auth:true,status:r.status};}
+    const ct=r.headers.get("content-type")||""; if(ct.includes("application/json")) return {ok:r.ok,status:r.status,json:await r.json()}; return {ok:r.ok,status:r.status,text:await r.text()};}
 
-        appendMessage("🙋 你", message);
-        messageInput.value = "";
+  if(!token()) goLogin();
 
-        const eventSource = new EventSource(`/ai/bailian/agent/stream?message=${encodeURIComponent(message)}`);
+  function switchView(v){Object.keys(views).forEach(k=>views[k].classList.toggle("active",k===v)); navs.forEach(n=>n.classList.toggle("active",n.dataset.view===v)); if(v==="kb")loadKb(); if(v==="book")loadAppointments(); if(v==="admin")loadAdmin();}
+  navs.forEach(n=>n.addEventListener("click",()=>switchView(n.dataset.view)));
+  el("logoutBtn").addEventListener("click",goLogin);
 
-        let botReply = "";
-        let closedByServer = false;
+  async function loadKb(){
+    const s=await api("/rag/status",{headers:authHeaders()}); const d=await api("/rag/documents",{headers:authHeaders()});
+    if(s.ok&&s.json){el("docCnt").textContent=String(s.json.documents||0); el("chunkCnt").textContent=String(s.json.chunks||0);}
+    if(!d.ok||!d.json){el("docList").innerHTML="<tr><td colspan='5' class='err'>加载失败</td></tr>"; return;}
+    const arr=d.json; if(!arr.length){el("docList").innerHTML="<tr><td colspan='5' class='muted'>暂无文档</td></tr>"; return;}
+    el("docList").innerHTML=arr.map(x=>"<tr><td>"+esc(x.id)+"</td><td>"+esc(x.filename)+"</td><td>"+esc(x.chunks)+"</td><td>"+esc(x.updatedAt)+"</td><td><button class='btn primary' data-reindex='"+x.id+"'>重建</button> <button class='btn danger' data-del='"+x.id+"'>删除</button></td></tr>").join("");
+  }
 
-        // 添加机器人回复占位符，后续更新内容
-        appendMessage("🤖 心理咨询师", "...");
+  el("kbUpload").addEventListener("click", async ()=>{
+    const f=el("kbFile").files[0]; if(!f){el("kbStatus").textContent="请先选择文件"; el("kbStatus").className="pill err"; return;}
+    const fd=new FormData(); fd.append("file",f); el("kbStatus").textContent="上传中...";
+    const r=await api("/rag/upload",{method:"POST",headers:{Authorization:"Bearer "+token()},body:fd});
+    if(r.ok){el("kbStatus").textContent=r.text||"上传成功"; el("kbStatus").className="pill ok"; el("kbFile").value=""; loadKb();}
+    else{el("kbStatus").textContent="上传失败: "+(r.text||r.status); el("kbStatus").className="pill err";}
+  });
 
-        // 获取最新机器人消息div，方便更新
-        const messages = chatBox.querySelectorAll("div");
-        const lastBotMessage = messages[messages.length - 1];
+  el("docList").addEventListener("click", async (e)=>{
+    const del=e.target.getAttribute("data-del"), re=e.target.getAttribute("data-reindex");
+    if(del){const r=await api("/rag/documents/"+del,{method:"DELETE",headers:authHeaders()}); if(r.ok)loadKb();}
+    if(re){const r=await api("/rag/documents/"+re+"/reindex",{method:"POST",headers:authHeaders()}); if(r.ok)loadKb();}
+  });
 
-        eventSource.onmessage = function(event) {
-            if (!event.data || event.data.trim() === "") return;
-            botReply += event.data;
-            lastBotMessage.innerHTML = `<strong>心理咨询师:</strong> <span class="whitespace-pre-wrap">${botReply}</span>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
-        };
+  async function loadAppointments(){
+    const r=await api("/api/appointments",{headers:authHeaders()}); if(!r.ok||!r.json){el("apList").innerHTML="<tr><td colspan='7' class='err'>加载失败</td></tr>"; return;}
+    const arr=r.json; if(!arr.length){el("apList").innerHTML="<tr><td colspan='7' class='muted'>暂无预约</td></tr>"; return;}
+    el("apList").innerHTML=arr.map(a=>"<tr><td>"+esc(a.name)+"</td><td>"+esc(a.expert||"")+"</td><td>"+esc(a.date)+"</td><td>"+esc(a.time)+"</td><td>"+esc(a.status||"")+"</td><td>"+esc(a.reason||"")+"</td><td>"+(a.status==="BOOKED"?"<button class='btn warn' data-rs='"+a.id+"'>改期</button> <button class='btn danger' data-cancel='"+a.id+"'>取消</button>":"")+"</td></tr>").join("");
+  }
 
-        // 如果服务器支持发送自定义事件“end”，可用如下：
-        // eventSource.addEventListener('end', function(event) {
-        //     closedByServer = true;
-        //     eventSource.close();
-        // });
+  el("apSubmit").addEventListener("click", async ()=>{
+    const p={name:el("apName").value.trim(),email:el("apEmail").value.trim(),date:el("apDate").value.trim(),time:el("apTime").value.trim(),expert:el("apExpert").value.trim(),reason:el("apReason").value.trim()||"咨询"};
+    if(!p.name||!p.email||!p.date||!p.time){el("apStatus").textContent="姓名/邮箱/日期/时段必填"; el("apStatus").className="pill err"; return;}
+    el("apStatus").textContent="提交中..."; el("apStatus").className="pill"; el("apSuggest").textContent="";
+    const r=await api("/api/appointments",{method:"POST",headers:authHeaders(true),body:JSON.stringify(p)});
+    if(r.ok){el("apStatus").textContent="预约成功"; el("apStatus").className="pill ok"; loadAppointments(); return;}
+    if(r.status===409){const d=r.json||{}; const sg=d.suggestions||[]; el("apStatus").textContent="时段冲突: "+(d.message||"该时段已占用"); el("apStatus").className="pill err"; el("apSuggest").textContent=sg.length?"建议: "+sg.map(x=>x.date+" "+x.time+"("+x.expert+")").join(" | "):"暂无可推荐时段"; return;}
+    el("apStatus").textContent="预约失败("+(r.status||"-")+")"; el("apStatus").className="pill err"; el("apSuggest").textContent="后端返回: "+(r.text||(r.json?JSON.stringify(r.json):"unknown"));
+  });
 
-        eventSource.onerror = function() {
-            if (!closedByServer) {
-                // 不要重复添加错误提示，且最后一次回复已经显示了答案
-                // 这里不显示“连接失败”，避免误导
-            }
-            eventSource.close();
-        };
-    });
+  el("apList").addEventListener("click", async (e)=>{
+    const c=e.target.getAttribute("data-cancel"), rs=e.target.getAttribute("data-rs");
+    if(c){const r=await api("/api/appointments/"+c+"/cancel",{method:"PATCH",headers:authHeaders()}); if(r.ok)loadAppointments();}
+    if(rs){const date=prompt("请输入新日期(yyyy-MM-dd)"); if(!date)return; const time=prompt("请输入新时段(如 14:00-15:00)"); if(!time)return; const expert=prompt("请输入专家(可空)")||""; const r=await api("/api/appointments/"+rs+"/reschedule",{method:"PUT",headers:authHeaders(true),body:JSON.stringify({date,time,expert})}); if(!r.ok&&r.status===409&&r.json){const sg=r.json.suggestions||[]; alert("改期冲突，建议: "+(sg.length?sg.map(x=>x.date+" "+x.time+"("+x.expert+")").join(" | "):"无"));} loadAppointments();}
+  });
 
-    function appendMessage(sender, text) {
-        const div = document.createElement("div");
-        div.innerHTML = `<strong>${sender}:</strong> <span class="whitespace-pre-wrap">${text}</span>`;
-        chatBox.appendChild(div);
-        chatBox.scrollTop = chatBox.scrollHeight;
+  async function loadAdminAppointments(){
+    const r=await api("/admin/appointments",{headers:authHeaders()});
+    if(!r.ok||!r.json){el("adminApList").innerHTML="<tr><td colspan='8' class='err'>加载失败</td></tr>"; return;}
+    const arr=r.json||[];
+    if(!arr.length){el("adminApList").innerHTML="<tr><td colspan='8' class='muted'>暂无预约记录</td></tr>"; return;}
+    el("adminApList").innerHTML=arr.map(a=>"<tr><td>"+esc(a.id)+"</td><td>"+esc(a.name)+"</td><td>"+esc(a.email)+"</td><td>"+esc(a.date)+"</td><td>"+esc(a.time)+"</td><td>"+esc(a.expert||"")+"</td><td>"+esc(a.status||"")+"</td><td>"+esc(a.reason||"")+"</td></tr>").join("");
+  }
+
+  async function loadAdmin(){
+    if(role()!=="ROLE_ADMIN"){el("adminTip").textContent="当前账号不是管理员。"; return;}
+    const [h,s,rep]=await Promise.all([
+      api("/admin/health",{headers:authHeaders()}),
+      api("/admin/experts/schedules",{headers:authHeaders()}),
+      api("/admin/reports/overview?days=7",{headers:authHeaders()})
+    ]);
+
+    if(h.ok&&h.json){const ok=h.json.database&&h.json.database.ok; el("healthBox").innerHTML="<span class='pill "+(ok?"ok":"err")+"'>数据库: "+(ok?"正常":"异常")+"</span> <span class='pill'>RAG文档: "+((h.json.rag&&h.json.rag.documents)||0)+"</span> <span class='pill'>RAG Chunk: "+((h.json.rag&&h.json.rag.chunks)||0)+"</span>";}
+
+    if(s.ok&&s.json){
+      const arr=s.json||[];
+      el("schList").innerHTML=arr.length?arr.map(x=>"<tr><td>"+esc(x.id)+"</td><td>"+esc(x.expert)+"</td><td>"+esc(x.date)+"</td><td>"+esc(x.time)+"</td><td>"+esc(String(x.enabled))+"</td><td><button class='btn warn' data-stoggle='"+x.id+"' data-senabled='"+x.enabled+"'>"+(x.enabled?"禁用":"启用")+"</button> <button class='btn danger' data-sdel='"+x.id+"'>删除</button></td></tr>").join(""):"<tr><td colspan='6' class='muted'>暂无排班</td></tr>";
     }
+
+    if(rep.ok&&rep.json){
+      const rp=rep.json||{};
+      el("rpChat").textContent=String(rp.chatMessages||0);
+      el("rpBooked").textContent=String(rp.bookedAppointments||0);
+      el("rpRate").textContent=((Number(rp.conversionRate||0)*100).toFixed(2))+"%";
+      const trend=rp.trend||[], reasons=rp.topReasons||[];
+      el("rpTrend").innerHTML=trend.length?trend.map(t=>"<tr><td>"+esc(t.date)+"</td><td>"+esc(t.booked)+"</td><td>"+esc(t.canceled)+"</td></tr>").join(""):"<tr><td colspan='3' class='muted'>暂无数据</td></tr>";
+      el("rpReasons").innerHTML=reasons.length?reasons.map(r=>"<tr><td>"+esc(r.reason)+"</td><td>"+esc(r.count)+"</td></tr>").join(""):"<tr><td colspan='2' class='muted'>暂无数据</td></tr>";
+    }
+
+    await loadAdminAppointments();
+  }
+
+  el("schAdd").addEventListener("click", async ()=>{
+    const p={expert:el("schExpert").value.trim(),date:el("schDate").value.trim(),time:el("schTime").value.trim()};
+    if(!p.expert||!p.date||!p.time){alert("请填写专家、日期、时段"); return;}
+    const r=await api("/admin/experts/schedules",{method:"POST",headers:authHeaders(true),body:JSON.stringify(p)});
+    if(r.ok) loadAdmin();
+  });
+
+  el("schList").addEventListener("click", async (e)=>{
+    const idT=e.target.getAttribute("data-stoggle"), enabled=e.target.getAttribute("data-senabled"), idD=e.target.getAttribute("data-sdel");
+    if(idT){const r=await api("/admin/experts/schedules/"+idT,{method:"PATCH",headers:authHeaders(true),body:JSON.stringify({enabled:enabled!=="true"})}); if(r.ok) loadAdmin();}
+    if(idD){const r=await api("/admin/experts/schedules/"+idD,{method:"DELETE",headers:authHeaders()}); if(r.ok) loadAdmin();}
+  });
+
+  el("adminApRefresh").addEventListener("click", loadAdminAppointments);
+  el("reportRefresh").addEventListener("click", loadAdmin);
+
+  el("chatForm").addEventListener("submit", (e)=>{
+    e.preventDefault();
+    const message=el("msg").value.trim(); if(!message)return;
+    append("你",message); el("msg").value="";
+    const base=el("useRag").checked?"/rag/stream":"/ai/bailian/agent/stream";
+    const url=base+"?message="+encodeURIComponent(message)+"&access_token="+encodeURIComponent(token());
+    const es=new EventSource(url);
+    let reply="", done=false;
+    append("助手","...");
+    const lines=el("chatBox").querySelectorAll("div");
+    const last=lines[lines.length-1];
+    const paint=()=>{last.innerHTML="<strong>助手:</strong> "+esc(reply||"...");};
+    es.onmessage=(ev)=>{reply+=ev.data||""; paint();};
+    es.addEventListener("chunk",(ev)=>{reply+=ev.data||""; paint();});
+    es.addEventListener("model_error",(ev)=>{last.innerHTML="<strong>助手:</strong> "+esc(ev.data||"模型调用失败"); done=true; es.close();});
+    es.addEventListener("done",()=>{done=true; es.close();});
+    es.onerror=()=>{ if(!done && !reply){last.innerHTML="<strong>助手:</strong> "+esc("流式对话失败，请检查模型 app-id/api-key/额度");} else {paint();} es.close(); };
+  });
+
+  setAuth();
+  switchView("chat");
 </script>
 </body>
 </html>

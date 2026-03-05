@@ -1,48 +1,35 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="UTF-8" />
   <title>心理专家预约</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    // 页面加载前强制校验登录状态
-    (function () {
-      const token = localStorage.getItem('authToken');
-      if (!token) {
-        const next = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/login.html?next=${next}`;
-      }
-    })();
-  </script>
 </head>
 <body class="bg-gray-100 text-gray-900">
 <div class="max-w-3xl mx-auto mt-10 p-6 bg-white rounded-2xl shadow-lg">
-  <h1 class="text-2xl font-bold mb-6 text-center">心理专家预约</h1>
+  <h1 class="text-2xl font-bold mb-6 text-center">📅 心理专家预约</h1>
 
-  <div class="mb-6 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2 max-w-md mx-auto">
-    <div class="flex items-center justify-between text-sm">
-      <span id="auth-status" class="text-gray-600"></span>
-      <button id="logout-btn" class="text-red-500 hover:underline">退出登录</button>
-    </div>
-    <p class="text-xs text-gray-500">如需切换账号，请退出后重新登录。</p>
-  </div>
-
+  <!-- 预约表单 -->
   <form id="appointment-form" class="space-y-4 max-w-md mx-auto">
     <div>
       <label class="block mb-1 font-semibold" for="name">姓名</label>
-      <input type="text" id="name" name="name" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      <input type="text" id="name" name="name" required
+             class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
     </div>
     <div>
       <label class="block mb-1 font-semibold" for="email">邮箱</label>
-      <input type="email" id="email" name="email" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      <input type="email" id="email" name="email" required
+             class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
     </div>
     <div>
       <label class="block mb-1 font-semibold" for="date">日期</label>
-      <input type="date" id="date" name="date" required class="w-full border border-gray-300 rounded px-3 py-2" />
+      <input type="date" id="date" name="date" required
+             class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
     </div>
     <div>
       <label class="block mb-1 font-semibold" for="time">时间段</label>
-      <select id="time" name="time" required class="w-full border border-gray-300 rounded px-3 py-2">
+      <select id="time" name="time" required
+              class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
         <option value="">请选择时间段</option>
         <option value="8:00-9:00">8:00-9:00</option>
         <option value="9:00-10:00">9:00-10:00</option>
@@ -54,13 +41,17 @@
     </div>
     <div>
       <label class="block mb-1 font-semibold" for="reason">预约原因</label>
-      <textarea id="reason" name="reason" rows="3" class="w-full border border-gray-300 rounded px-3 py-2"></textarea>
+      <textarea id="reason" name="reason" rows="3"
+                class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="简述您的心理疾病症状"></textarea>
     </div>
-    <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">提交预约</button>
+    <button type="submit"
+            class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">提交预约</button>
   </form>
 
   <hr class="my-8" />
 
+  <!-- 预约列表 -->
   <h2 class="text-xl font-semibold mb-4 text-center">已预约列表</h2>
   <table class="min-w-full border border-gray-300 rounded-md overflow-hidden">
     <thead class="bg-gray-200">
@@ -80,44 +71,13 @@
 </div>
 
 <script>
-  const TOKEN_KEY = "authToken";
-  const ROLE_KEY = "authRole";
-
   const form = document.getElementById('appointment-form');
   const list = document.getElementById('appointments-list');
-  const authStatus = document.getElementById('auth-status');
-  const logoutBtn = document.getElementById('logout-btn');
 
-  function getToken() {
-    return localStorage.getItem(TOKEN_KEY);
-  }
-
-  function headers() {
-    const token = getToken();
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
-  }
-
-  function updateAuthStatus() {
-    const token = getToken();
-    authStatus.textContent = token ? `已登录，角色: ${localStorage.getItem(ROLE_KEY)}` : '未登录';
-  }
-
-  logoutBtn.addEventListener('click', () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(ROLE_KEY);
-    const next = encodeURIComponent(window.location.pathname + window.location.search);
-    window.location.href = `/login.html?next=${next}`;
-  });
-
+  // 加载已有预约数据
   async function loadAppointments() {
-    const token = getToken();
-    if (!token) {
-      list.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-400">请先登录</td></tr>';
-      return;
-    }
-
     try {
-      const res = await fetch('/api/appointments', { headers: headers() });
+      const res = await fetch('/api/appointments');
       if (!res.ok) throw new Error('获取预约失败');
       const data = await res.json();
       if (!data.length) {
@@ -137,17 +97,15 @@
           </tr>
         `).join('');
     } catch (e) {
-      list.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">加载失败: ${e.message}</td></tr>`;
+      list.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">加载失败：${e.message}</td></tr>`;
     }
   }
 
+  // 删除预约
   async function deleteAppointment(id) {
     if (!confirm('确定删除此预约吗？')) return;
     try {
-      const res = await fetch(`/api/appointments/${id}`, {
-        method: 'DELETE',
-        headers: headers()
-      });
+      const res = await fetch(`/api/appointments/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('删除失败');
       await loadAppointments();
     } catch (e) {
@@ -155,23 +113,23 @@
     }
   }
 
+  // 表单提交
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    if (!getToken()) {
-      alert('请先登录');
-      return;
-    }
-
     const formData = new FormData(form);
     const appointment = {};
     for (const [key, val] of formData.entries()) {
       appointment[key] = val.trim();
     }
+    if (!appointment.name || !appointment.email || !appointment.date || !appointment.time) {
+      alert('请填写完整姓名、邮箱、日期和时间段');
+      return;
+    }
 
     try {
       const res = await fetch('/api/appointments', {
         method: 'POST',
-        headers: { ...headers(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(appointment)
       });
       if (!res.ok) throw new Error('提交失败');
@@ -183,13 +141,14 @@
     }
   });
 
+  // 事件委托删除按钮
   list.addEventListener('click', e => {
     if (e.target.classList.contains('delete-btn')) {
-      deleteAppointment(e.target.dataset.id);
+      const id = e.target.dataset.id;
+      deleteAppointment(id);
     }
   });
 
-  updateAuthStatus();
   loadAppointments();
 </script>
 </body>
