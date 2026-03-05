@@ -12,8 +12,8 @@ spring:
     dashscope:
 
       agent:
-        app-id: d8cd5f81725542739d3a898dff4d9044
-      api-key: sk-08e63f7e59aa496e82897dd6c849d544 # 百炼API Key
+        app-id: 
+      api-key:  # 百炼API Key
       #workspace-id: ${WORKSPACE_ID} # 业务空间ID
 server:
   servlet:
