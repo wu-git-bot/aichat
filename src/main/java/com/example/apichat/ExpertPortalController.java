@@ -33,14 +33,19 @@ public class ExpertPortalController {
     @GetMapping("/dashboard")
     public Map<String, Object> dashboard() {
         String expert = currentExpert();
+        
+        // 获取该专家的排班
         List<Map<String, Object>> schedules = expertScheduleRepository.findAll().stream()
                 .filter(item -> expert.equalsIgnoreCase(item.getExpert()))
                 .sorted(Comparator.comparing(ExpertScheduleEntity::getDate).thenComparing(ExpertScheduleEntity::getTime))
                 .map(this::scheduleMap)
                 .collect(Collectors.toList());
 
+        // 获取分配给该专家的预约
+        // 1. 直接指定了该专家名字的预约
+        // 2. 预约中 expert 为空或 "SYSTEM" 但该专家有对应的可用排班的预约
         List<Map<String, Object>> appointments = appointmentRepository.findAll().stream()
-                .filter(item -> expert.equalsIgnoreCase(item.getExpert()))
+                .filter(item -> isAppointmentForExpert(item, expert))
                 .sorted(Comparator.comparing(AppointmentEntity::getDate).thenComparing(AppointmentEntity::getTime))
                 .map(this::appointmentMap)
                 .collect(Collectors.toList());
@@ -74,6 +79,37 @@ public class ExpertPortalController {
         entity.setEnabled(value);
         expertScheduleRepository.save(entity);
         return ResponseEntity.ok(scheduleMap(entity));
+    }
+
+    /**
+     * 判断一个预约是否属于当前专家
+     * 
+     * 预约被视为分配给专家的情况：
+     * 1. 预约的 expert 字段与专家名字完全匹配（不区分大小写）
+     * 2. 预约的 expert 为 "SYSTEM" 或为空，但专家在该时间段有启用的排班
+     */
+    private boolean isAppointmentForExpert(AppointmentEntity appointment, String expertName) {
+        String appointmentExpert = appointment.getExpert();
+        
+        // 情况1：直接指定了该专家
+        if (appointmentExpert != null && !appointmentExpert.isBlank() 
+                && expertName.equalsIgnoreCase(appointmentExpert.trim())) {
+            return true;
+        }
+        
+        // 情况2：预约是给 SYSTEM 或空，但该专家在该时间段有可用排班
+        if ((appointmentExpert == null || appointmentExpert.isBlank() || "SYSTEM".equalsIgnoreCase(appointmentExpert))) {
+            boolean hasSchedule = expertScheduleRepository.findAll().stream()
+                    .anyMatch(schedule -> 
+                        expertName.equalsIgnoreCase(schedule.getExpert())
+                        && appointment.getDate().equals(schedule.getDate())
+                        && appointment.getTime().equals(schedule.getTime())
+                        && Boolean.TRUE.equals(schedule.getEnabled())
+                    );
+            return hasSchedule;
+        }
+        
+        return false;
     }
 
     private String currentExpert() {
