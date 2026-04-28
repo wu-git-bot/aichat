@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>专家工作台</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="shell dashboard">
+  <aside class="sidebar">
+    <span class="eyebrow" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.12);color:#86efac">Expert Console</span>
+    <h1>专家工作台</h1>
+    <p class="subline">你的排班和分配到你的预约，会一起显示在这里。</p>
+    <div class="menu-list">
+      <button class="menu-btn active" data-panel="overviewPanel">今日概览</button>
+      <button class="menu-btn" data-panel="schedulePanel">我的排班</button>
+      <button class="menu-btn" data-panel="appointmentPanel">我的预约</button>
+    </div>
+    <div class="sidebar-foot">
+      <div id="expertWhoami" class="subline">专家已登录</div>
+      <div class="inline-form" style="margin-top:14px">
+        <a class="btn btn-secondary" href="/index.html">切换入口</a>
+        <button id="logoutBtn" class="btn btn-danger" type="button">退出登录</button>
+      </div>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div class="topbar dashboard-card">
+      <div>
+        <div class="eyebrow">Expert Workspace</div>
+        <h2 style="margin:14px 0 8px;font-size:32px">查看自己的排班，也看清今天的预约安排。</h2>
+        <div class="muted">专家账号默认是按用户名识别，所以排班里的专家名称应与专家用户名一致。</div>
+      </div>
+      <button id="refreshDashboard" class="btn btn-secondary" type="button">刷新</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat-card"><div class="muted">专家账号</div><div id="statExpert" class="stat-value" style="font-size:24px">-</div></div>
+      <div class="stat-card"><div class="muted">启用排班</div><div id="statEnabled" class="stat-value">0</div></div>
+      <div class="stat-card"><div class="muted">已分配预约</div><div id="statBooked" class="stat-value">0</div></div>
+      <div class="stat-card"><div class="muted">今天</div><div id="statToday" class="stat-value" style="font-size:24px">-</div></div>
+    </div>
+
+    <section id="overviewPanel" class="panel active">
+      <div class="grid-2">
+        <div class="dashboard-card">
+          <h3 style="margin-top:0">今日提示</h3>
+          <div id="expertNote" class="note">加载中...</div>
+        </div>
+        <div class="dashboard-card">
+          <h3 style="margin-top:0">近期预约</h3>
+          <div class="table-shell" style="margin-top:12px">
+            <table>
+              <thead><tr><th>来访者</th><th>日期</th><th>时间</th><th>状态</th></tr></thead>
+              <tbody id="quickRows"><tr><td colspan="4" class="empty">加载中...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="schedulePanel" class="panel">
+      <div class="dashboard-card">
+        <h3 style="margin-top:0">我的排班</h3>
+        <div class="muted">可以直接启用或停用自己的排班。</div>
+        <div class="table-shell" style="margin-top:12px">
+          <table>
+            <thead><tr><th>ID</th><th>日期</th><th>时间</th><th>启用</th><th>操作</th></tr></thead>
+            <tbody id="scheduleRows"><tr><td colspan="5" class="empty">加载中...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="appointmentPanel" class="panel">
+      <div class="dashboard-card">
+        <h3 style="margin-top:0">分配给我的预约</h3>
+        <div class="table-shell" style="margin-top:12px">
+          <table>
+            <thead><tr><th>ID</th><th>来访者</th><th>邮箱</th><th>日期</th><th>时间</th><th>状态</th><th>原因</th></tr></thead>
+            <tbody id="appointmentRows"><tr><td colspan="7" class="empty">加载中...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </section>
+</div>
+
+<script>
+  const TOKEN_KEY = "authToken";
+  const ROLE_KEY = "authRole";
+  if (!localStorage.getItem(TOKEN_KEY) || localStorage.getItem(ROLE_KEY) !== "ROLE_EXPERT") {
+    location.href = "/login.html?role=expert&next=/expert.html";
+  }
+
+  function authHeaders(json) {
+    const headers = { Authorization: "Bearer " + localStorage.getItem(TOKEN_KEY) };
+    if (json) headers["Content-Type"] = "application/json";
+    return headers;
+  }
+
+  function esc(value) {
+    const div = document.createElement("div");
+    div.textContent = value == null ? "" : String(value);
+    return div.innerHTML;
+  }
+
+  function switchPanel(name) {
+    document.querySelectorAll(".panel").forEach((panel) => panel.classList.toggle("active", panel.id === name));
+    document.querySelectorAll(".menu-btn").forEach((button) => button.classList.toggle("active", button.dataset.panel === name));
+  }
+  document.querySelectorAll(".menu-btn").forEach((button) => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
+
+  async function api(url, options = {}) {
+    const res = await fetch(url, options);
+    const type = res.headers.get("content-type") || "";
+    return { ok: res.ok, status: res.status, data: type.includes("application/json") ? await res.json() : await res.text() };
+  }
+
+  async function loadDashboard() {
+    const res = await api("/expert/me/dashboard", { headers: authHeaders() });
+    if (!res.ok) return;
+    const data = res.data;
+    document.getElementById("expertWhoami").textContent = "当前专家：" + data.expert;
+    document.getElementById("statExpert").textContent = data.expert;
+    document.getElementById("statEnabled").textContent = String(data.enabledSlots || 0);
+    document.getElementById("statBooked").textContent = String(data.bookedCount || 0);
+    document.getElementById("statToday").textContent = data.today || "-";
+    document.getElementById("expertNote").textContent = "今天是 " + data.today + "，你当前有 " + (data.enabledSlots || 0) + " 个启用排班，" + (data.bookedCount || 0) + " 条已分配预约。";
+
+    const schedules = data.schedules || [];
+    const appointments = data.appointments || [];
+    document.getElementById("quickRows").innerHTML = appointments.slice(0, 5).map((item) => "<tr><td>" + esc(item.name) + "</td><td>" + esc(item.date) + "</td><td>" + esc(item.time) + "</td><td>" + esc(item.status) + "</td></tr>").join("") || "<tr><td colspan='4' class='empty'>暂无预约</td></tr>";
+    document.getElementById("scheduleRows").innerHTML = schedules.map((item) => {
+      const label = item.enabled ? "停用" : "启用";
+      return "<tr><td>" + esc(item.id) + "</td><td>" + esc(item.date) + "</td><td>" + esc(item.time) + "</td><td>" + esc(item.enabled) + "</td><td><button class='btn btn-secondary' data-id='" + esc(item.id) + "' data-enabled='" + esc(item.enabled) + "' type='button'>" + label + "</button></td></tr>";
+    }).join("") || "<tr><td colspan='5' class='empty'>暂无排班</td></tr>";
+    document.getElementById("appointmentRows").innerHTML = appointments.map((item) => "<tr><td>" + esc(item.id) + "</td><td>" + esc(item.name) + "</td><td>" + esc(item.email) + "</td><td>" + esc(item.date) + "</td><td>" + esc(item.time) + "</td><td>" + esc(item.status) + "</td><td>" + esc(item.reason) + "</td></tr>").join("") || "<tr><td colspan='7' class='empty'>暂无预约</td></tr>";
+  }
+
+  document.getElementById("scheduleRows").addEventListener("click", async (event) => {
+    const id = event.target.getAttribute("data-id");
+    if (!id) return;
+    const enabled = event.target.getAttribute("data-enabled") !== "true";
+    const res = await api("/expert/me/schedules/" + id, {
+      method: "PATCH",
+      headers: authHeaders(true),
+      body: JSON.stringify({ enabled })
+    });
+    if (res.ok) loadDashboard();
+  });
+
+  document.getElementById("refreshDashboard").addEventListener("click", loadDashboard);
+  document.getElementById("logoutBtn").addEventListener("click", () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ROLE_KEY);
+    location.href = "/index.html";
+  });
+
+  loadDashboard();
+</script>
+</body>
+</html>

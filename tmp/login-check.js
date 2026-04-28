@@ -1,53 +1,4 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>登录</title>
-  <link rel="stylesheet" href="/app.css">
-</head>
-<body>
-<main class="auth-shell">
-  <section class="auth-aside">
-    <span class="eyebrow">Secure Sign In</span>
-    <h1 class="headline" style="font-size:48px">选择身份，<br>进入对应工作台。</h1>
-    <p class="subline" style="color:rgba(255,255,255,.78)">
-      登录后会根据角色自动跳转。当前支持用户、专家、管理员三种入口。
-    </p>
-    <div class="role-chip-row">
-      <span id="chip-user" class="role-chip">用户</span>
-      <span id="chip-expert" class="role-chip">专家</span>
-      <span id="chip-admin" class="role-chip">管理员</span>
-    </div>
-    <div class="note" style="margin-top:24px;color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15)">
-      默认账号：user / 123456、admin / 123456。专家账号示例：linyu、chenmo、jiangning、suwan、qiaoan，默认密码均为 123456。
-    </div>
-  </section>
 
-  <section class="auth-main">
-    <div class="split" style="margin-bottom:24px">
-      <div>
-        <div class="eyebrow" style="background:rgba(15,118,110,.08);border-color:rgba(15,118,110,.16)">Account Access</div>
-        <h2 style="margin:14px 0 8px;font-size:32px">登录继续</h2>
-        <p class="muted" id="roleText">当前角色：用户</p>
-      </div>
-      <a href="/index.html" class="btn btn-secondary">返回角色选择</a>
-    </div>
-
-    <div class="field">
-      <label for="username">用户名</label>
-      <input id="username" class="input" type="text" placeholder="请输入用户名">
-    </div>
-    <div class="field">
-      <label for="password">密码</label>
-      <input id="password" class="input" type="password" placeholder="请输入密码">
-    </div>
-    <button id="loginBtn" class="btn btn-primary" style="width:100%">登录</button>
-    <div id="status" class="status-line"></div>
-  </section>
-</main>
-
-<script>
   const TOKEN_KEY = "authToken";
   const ROLE_KEY = "authRole";
   const params = new URLSearchParams(location.search);
@@ -109,6 +60,3 @@
   document.addEventListener("keydown", (event) => {
     if (event.key === "Enter") login();
   });
-</script>
-</body>
-</html>

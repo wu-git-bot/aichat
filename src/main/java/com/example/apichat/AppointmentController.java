@@ -1,21 +1,30 @@
 package com.example.apichat;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/appointments")
 public class AppointmentController {
+
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
     private static final List<String> TIME_SLOTS = List.of(
             "8:00-9:00",
@@ -28,16 +37,20 @@ public class AppointmentController {
 
     private final AppointmentRepository appointmentRepository;
     private final ExpertScheduleRepository expertScheduleRepository;
+    private final String defaultUserUsername;
 
     public AppointmentController(AppointmentRepository appointmentRepository,
-                                 ExpertScheduleRepository expertScheduleRepository) {
+                                 ExpertScheduleRepository expertScheduleRepository,
+                                 @Value("${app.security.users.user.username:user}") String defaultUserUsername) {
         this.appointmentRepository = appointmentRepository;
         this.expertScheduleRepository = expertScheduleRepository;
+        this.defaultUserUsername = defaultUserUsername;
     }
 
     @GetMapping
     public List<Map<String, String>> getAllAppointments() {
         return appointmentRepository.findAll().stream()
+                .filter(this::belongsToCurrentUser)
                 .sorted(Comparator.comparing(AppointmentEntity::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::toMap)
                 .collect(Collectors.toList());
@@ -45,12 +58,18 @@ public class AppointmentController {
 
     @PostMapping
     public ResponseEntity<?> createAppointment(@RequestBody Map<String, String> appointment) {
+        String name = appointment.getOrDefault("name", "").trim();
+        String email = appointment.getOrDefault("email", "").trim();
         String selectedDate = appointment.getOrDefault("date", "").trim();
         String selectedTime = appointment.getOrDefault("time", "").trim();
         String requestedExpert = appointment.getOrDefault("expert", "").trim();
+        String ownerUsername = currentPrincipal();
 
-        if (selectedDate.isEmpty() || selectedTime.isEmpty()) {
-            return ResponseEntity.badRequest().body("date/time required");
+        if (name.isEmpty() || email.isEmpty() || selectedDate.isEmpty() || selectedTime.isEmpty()) {
+            return ResponseEntity.badRequest().body("name/email/date/time required");
+        }
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
+            return ResponseEntity.badRequest().body("invalid email format");
         }
 
         LocalDate date;
@@ -58,6 +77,12 @@ public class AppointmentController {
             date = LocalDate.parse(selectedDate);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("invalid date format, expected yyyy-MM-dd");
+        }
+        if (!TIME_SLOTS.contains(selectedTime)) {
+            return ResponseEntity.badRequest().body("invalid time slot");
+        }
+        if (isPastAppointment(date, selectedTime)) {
+            return ResponseEntity.badRequest().body("appointment time cannot be in the past");
         }
 
         String expert = pickExpert(date, selectedTime, requestedExpert);
@@ -76,8 +101,9 @@ public class AppointmentController {
         }
 
         AppointmentEntity entity = new AppointmentEntity();
-        entity.setName(appointment.getOrDefault("name", "").trim());
-        entity.setEmail(appointment.getOrDefault("email", "").trim());
+        entity.setName(name);
+        entity.setEmail(email);
+        entity.setOwnerUsername(ownerUsername);
         entity.setDate(date);
         entity.setTime(selectedTime);
         entity.setReason(appointment.getOrDefault("reason", "").trim());
@@ -93,6 +119,7 @@ public class AppointmentController {
     public ResponseEntity<?> reschedule(@PathVariable Long id, @RequestBody Map<String, String> body) {
         AppointmentEntity entity = appointmentRepository.findById(id).orElse(null);
         if (entity == null) return ResponseEntity.notFound().build();
+        if (!belongsToCurrentUser(entity)) return ResponseEntity.status(403).body("forbidden");
         if (!"BOOKED".equals(entity.getStatus())) {
             return ResponseEntity.badRequest().body("only BOOKED appointment can be rescheduled");
         }
@@ -100,12 +127,21 @@ public class AppointmentController {
         String dateStr = body.getOrDefault("date", "").trim();
         String time = body.getOrDefault("time", "").trim();
         String requestedExpert = body.getOrDefault("expert", entity.getExpert()).trim();
+        if (dateStr.isEmpty() || time.isEmpty()) {
+            return ResponseEntity.badRequest().body("date/time required");
+        }
 
         LocalDate date;
         try {
             date = LocalDate.parse(dateStr);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("invalid date format, expected yyyy-MM-dd");
+        }
+        if (!TIME_SLOTS.contains(time)) {
+            return ResponseEntity.badRequest().body("invalid time slot");
+        }
+        if (isPastAppointment(date, time)) {
+            return ResponseEntity.badRequest().body("appointment time cannot be in the past");
         }
 
         String expert = pickExpert(date, time, requestedExpert);
@@ -137,6 +173,7 @@ public class AppointmentController {
     public ResponseEntity<?> cancel(@PathVariable Long id) {
         AppointmentEntity entity = appointmentRepository.findById(id).orElse(null);
         if (entity == null) return ResponseEntity.notFound().build();
+        if (!belongsToCurrentUser(entity)) return ResponseEntity.status(403).body("forbidden");
         entity.setStatus("CANCELED");
         entity.setUpdatedAt(LocalDateTime.now());
         appointmentRepository.save(entity);
@@ -159,9 +196,69 @@ public class AppointmentController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteAppointment(@PathVariable Long id) {
-        if (!appointmentRepository.existsById(id)) return ResponseEntity.notFound().build();
+        AppointmentEntity entity = appointmentRepository.findById(id).orElse(null);
+        if (entity == null) return ResponseEntity.notFound().build();
+        if (!belongsToCurrentUser(entity)) return ResponseEntity.status(403).build();
         appointmentRepository.deleteById(id);
         return ResponseEntity.ok("Appointment deleted");
+    }
+
+    private boolean belongsToCurrentUser(AppointmentEntity entity) {
+        if (canAccessAllAppointments()) {
+            return true;
+        }
+        String principal = currentPrincipal();
+        if (principal == null) {
+            return false;
+        }
+        if (principal.equalsIgnoreCase(String.valueOf(entity.getOwnerUsername()))) {
+            return true;
+        }
+        return principal.equalsIgnoreCase(String.valueOf(entity.getEmail()))
+                || principal.equalsIgnoreCase(String.valueOf(entity.getName()));
+    }
+
+    private String currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null) {
+            return null;
+        }
+        String principal = authentication.getName().trim();
+        return principal.isBlank() ? null : principal;
+    }
+
+    private boolean canAccessAllAppointments() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+
+        boolean admin = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_ADMIN"::equals);
+        if (admin) {
+            return true;
+        }
+
+        String principal = authentication.getName();
+        return principal != null && principal.equalsIgnoreCase(defaultUserUsername);
+    }
+
+    private boolean isPastAppointment(LocalDate date, String timeSlot) {
+        LocalTime start = parseStartTime(timeSlot);
+        return LocalDateTime.of(date, start).isBefore(LocalDateTime.now());
+    }
+
+    private LocalTime parseStartTime(String timeSlot) {
+        String[] parts = timeSlot.split("-");
+        if (parts.length == 0) {
+            throw new IllegalArgumentException("invalid time slot");
+        }
+        try {
+            return LocalTime.parse(parts[0]);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("invalid time slot");
+        }
     }
 
     private String pickExpert(LocalDate date, String time, String requestedExpert) {

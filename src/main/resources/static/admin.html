@@ -1,76 +1,229 @@
-﻿<!DOCTYPE html>
-<html lang="zh">
+<!doctype html>
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>管理员登录</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    // 页面加载前校验管理员登录
-    (function () {
-      const token = localStorage.getItem('authToken');
-      const role = localStorage.getItem('authRole');
-      if (!token) {
-        const next = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/login.html?next=${next}`;
-      } else if (role !== 'ROLE_ADMIN') {
-        alert('需要管理员权限，已跳转到登录页');
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('authRole');
-        window.location.href = `/login.html?next=/admin.html`;
-      }
-    })();
-  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理员工作台</title>
+  <link rel="stylesheet" href="/app.css">
 </head>
-<body class="bg-gray-100 p-10 text-gray-900">
-<div class="max-w-xl mx-auto bg-white shadow-lg p-6 rounded-lg">
-  <h1 class="text-2xl font-bold mb-4">管理员登录</h1>
+<body>
+<div class="shell dashboard">
+  <aside class="sidebar">
+    <span class="eyebrow" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.12);color:#fde68a">Admin Console</span>
+    <h1>管理员工作台</h1>
+    <p class="subline">集中维护排班、预约、报表和系统健康。</p>
+    <div class="menu-list">
+      <button class="menu-btn active" data-panel="overviewPanel">总览</button>
+      <button class="menu-btn" data-panel="schedulePanel">专家排班</button>
+      <button class="menu-btn" data-panel="appointmentPanel">预约列表</button>
+    </div>
+    <div class="sidebar-foot">
+      <div id="adminWhoami" class="subline">管理员已登录</div>
+      <div class="inline-form" style="margin-top:14px">
+        <a class="btn btn-secondary" href="/index.html">切换入口</a>
+        <button id="logoutBtn" class="btn btn-danger" type="button">退出登录</button>
+      </div>
+    </div>
+  </aside>
 
-  <div class="flex items-center justify-between mb-4 text-sm">
-    <span id="status" class="text-gray-600"></span>
-    <button id="logout-btn" class="text-red-500 hover:underline">退出登录</button>
-  </div>
+  <section class="content">
+    <div class="topbar dashboard-card">
+      <div>
+        <div class="eyebrow">Operations Board</div>
+        <h2 style="margin:14px 0 8px;font-size:32px">排班、预约和系统状态，一页总览。</h2>
+        <div class="muted">管理员端强化了表格和信息层次，适合日常运营查看。</div>
+      </div>
+    </div>
 
-  <div id="appointments" class="mt-6">
-    <h2 class="text-xl font-bold mb-2">预约列表</h2>
-    <ul id="appointment-list" class="text-sm space-y-2"></ul>
-  </div>
+    <div class="stats">
+      <div class="stat-card"><div class="muted">预约总数</div><div id="statTotal" class="stat-value">0</div></div>
+      <div class="stat-card"><div class="muted">已预约</div><div id="statBooked" class="stat-value">0</div></div>
+      <div class="stat-card"><div class="muted">已取消</div><div id="statCanceled" class="stat-value">0</div></div>
+      <div class="stat-card"><div class="muted">排班数</div><div id="statSchedules" class="stat-value">0</div></div>
+    </div>
+
+    <section id="overviewPanel" class="panel active">
+      <div class="grid-2">
+        <div class="dashboard-card">
+          <h3 style="margin-top:0">系统健康</h3>
+          <div id="healthBox" class="note">加载中...</div>
+        </div>
+        <div class="dashboard-card">
+          <h3 style="margin-top:0">最近 7 天转化</h3>
+          <div class="table-shell" style="margin-top:12px">
+            <table>
+              <thead><tr><th>日期</th><th>预约</th><th>取消</th></tr></thead>
+              <tbody id="trendRows"><tr><td colspan="3" class="empty">加载中...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="schedulePanel" class="panel">
+      <div class="dashboard-card">
+        <div class="split">
+          <div>
+            <h3 style="margin-top:0">专家排班</h3>
+            <div class="muted">新增、启停、删除都在这里完成。</div>
+          </div>
+          <button id="refreshSchedules" class="btn btn-secondary" type="button">刷新</button>
+        </div>
+        <div class="inline-form" style="margin-top:12px">
+            <input id="schExpert" class="input" placeholder="专家用户名，例如 linyu">
+          <input id="schDate" class="input" type="date">
+          <select id="schTime" class="select">
+            <option value="">选择时间段</option>
+            <option>8:00-9:00</option>
+            <option>9:00-10:00</option>
+            <option>10:00-11:00</option>
+            <option>14:00-15:00</option>
+            <option>15:00-16:00</option>
+            <option>16:00-17:00</option>
+          </select>
+          <button id="addSchedule" class="btn btn-primary" type="button">新增排班</button>
+        </div>
+        <div class="table-shell" style="margin-top:14px">
+          <table>
+            <thead><tr><th>ID</th><th>专家</th><th>日期</th><th>时间</th><th>启用</th><th>操作</th></tr></thead>
+            <tbody id="scheduleRows"><tr><td colspan="6" class="empty">加载中...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="appointmentPanel" class="panel">
+      <div class="dashboard-card">
+        <div class="split">
+          <div>
+            <h3 style="margin-top:0">预约列表</h3>
+            <div class="muted">管理员可以查看全部预约记录。</div>
+          </div>
+          <button id="refreshAppointments" class="btn btn-secondary" type="button">刷新</button>
+        </div>
+        <div class="table-shell" style="margin-top:14px">
+          <table>
+            <thead><tr><th>ID</th><th>姓名</th><th>邮箱</th><th>日期</th><th>时间</th><th>专家</th><th>状态</th><th>原因</th></tr></thead>
+            <tbody id="appointmentRows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </section>
 </div>
 
 <script>
-  const TOKEN_KEY = 'authToken';
-  const ROLE_KEY = 'authRole';
+  const TOKEN_KEY = "authToken";
+  const ROLE_KEY = "authRole";
+  if (!localStorage.getItem(TOKEN_KEY) || localStorage.getItem(ROLE_KEY) !== "ROLE_ADMIN") {
+    location.href = "/login.html?role=admin&next=/admin.html";
+  }
 
-  const statusEl = document.getElementById('status');
-  const logoutBtn = document.getElementById('logout-btn');
+  function authHeaders(json) {
+    const headers = { Authorization: "Bearer " + localStorage.getItem(TOKEN_KEY) };
+    if (json) headers["Content-Type"] = "application/json";
+    return headers;
+  }
 
-  function authHeaders() {
-    const token = localStorage.getItem(TOKEN_KEY);
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  function esc(value) {
+    const div = document.createElement("div");
+    div.textContent = value == null ? "" : String(value);
+    return div.innerHTML;
+  }
+
+  async function api(url, options = {}) {
+    const res = await fetch(url, options);
+    const type = res.headers.get("content-type") || "";
+    return { ok: res.ok, status: res.status, data: type.includes("application/json") ? await res.json() : await res.text() };
+  }
+
+  function switchPanel(name) {
+    document.querySelectorAll(".panel").forEach((panel) => panel.classList.toggle("active", panel.id === name));
+    document.querySelectorAll(".menu-btn").forEach((button) => button.classList.toggle("active", button.dataset.panel === name));
+  }
+  document.querySelectorAll(".menu-btn").forEach((button) => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
+
+  document.getElementById("logoutBtn").addEventListener("click", () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ROLE_KEY);
+    location.href = "/index.html";
+  });
+
+  async function loadHealth() {
+    const health = await api("/admin/health", { headers: authHeaders() });
+    const report = await api("/admin/reports/overview?days=7", { headers: authHeaders() });
+    if (health.ok) {
+      const db = health.data.database && health.data.database.ok ? "正常" : "异常";
+      document.getElementById("healthBox").innerHTML = "数据库：" + esc(db) + "<br>RAG 文档：" + esc((health.data.rag && health.data.rag.documents) || 0) + "<br>RAG Chunk：" + esc((health.data.rag && health.data.rag.chunks) || 0);
+    }
+    if (report.ok) {
+      document.getElementById("trendRows").innerHTML = (report.data.trend || []).map((item) => "<tr><td>" + esc(item.date) + "</td><td>" + esc(item.booked) + "</td><td>" + esc(item.canceled) + "</td></tr>").join("") || "<tr><td colspan='3' class='empty'>暂无数据</td></tr>";
+    }
+  }
+
+  async function loadSchedules() {
+    const res = await api("/admin/experts/schedules", { headers: authHeaders() });
+    const rows = document.getElementById("scheduleRows");
+    if (!res.ok) {
+      rows.innerHTML = "<tr><td colspan='6' class='empty'>加载失败</td></tr>";
+      return;
+    }
+    const items = res.data || [];
+    document.getElementById("statSchedules").textContent = String(items.length);
+    rows.innerHTML = items.length ? items.map((item) => {
+      const label = item.enabled ? "停用" : "启用";
+      return "<tr><td>" + esc(item.id) + "</td><td>" + esc(item.expert) + "</td><td>" + esc(item.date) + "</td><td>" + esc(item.time) + "</td><td>" + esc(item.enabled) + "</td><td><button class='btn btn-secondary' data-toggle='" + esc(item.id) + "' data-enabled='" + esc(item.enabled) + "' type='button'>" + label + "</button> <button class='btn btn-danger' data-delete='" + esc(item.id) + "' type='button'>删除</button></td></tr>";
+    }).join("") : "<tr><td colspan='6' class='empty'>暂无排班</td></tr>";
   }
 
   async function loadAppointments() {
-    const res = await fetch('/admin/appointments', { headers: authHeaders() });
+    const res = await api("/admin/appointments", { headers: authHeaders() });
+    const rows = document.getElementById("appointmentRows");
     if (!res.ok) {
-      statusEl.textContent = '加载预约失败';
+      rows.innerHTML = "<tr><td colspan='8' class='empty'>加载失败</td></tr>";
       return;
     }
-
-    const data = await res.json();
-    const list = document.getElementById('appointment-list');
-    list.innerHTML = '';
-    data.forEach(app => {
-      const li = document.createElement('li');
-      li.textContent = `人员 ${app.name} | 邮箱 ${app.email} | 日期 ${app.date} ${app.time} | 情况 ${app.reason}`;
-      list.appendChild(li);
-    });
+    const items = res.data || [];
+    document.getElementById("statTotal").textContent = String(items.length);
+    document.getElementById("statBooked").textContent = String(items.filter((item) => item.status === "BOOKED").length);
+    document.getElementById("statCanceled").textContent = String(items.filter((item) => item.status === "CANCELED").length);
+    rows.innerHTML = items.length ? items.map((item) => "<tr><td>" + esc(item.id) + "</td><td>" + esc(item.name) + "</td><td>" + esc(item.email) + "</td><td>" + esc(item.date) + "</td><td>" + esc(item.time) + "</td><td>" + esc(item.expert) + "</td><td>" + esc(item.status) + "</td><td>" + esc(item.reason) + "</td></tr>").join("") : "<tr><td colspan='8' class='empty'>暂无预约</td></tr>";
   }
 
-  logoutBtn.addEventListener('click', () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(ROLE_KEY);
-    const next = encodeURIComponent(window.location.pathname + window.location.search);
-    window.location.href = `/login.html?next=${next}`;
+  document.getElementById("addSchedule").addEventListener("click", async () => {
+    const payload = {
+      expert: document.getElementById("schExpert").value.trim(),
+      date: document.getElementById("schDate").value.trim(),
+      time: document.getElementById("schTime").value.trim()
+    };
+    if (!payload.expert || !payload.date || !payload.time) {
+      alert("请填写专家、日期和时间");
+      return;
+    }
+    const res = await api("/admin/experts/schedules", { method: "POST", headers: authHeaders(true), body: JSON.stringify(payload) });
+    if (res.ok) loadSchedules();
   });
+
+  document.getElementById("scheduleRows").addEventListener("click", async (event) => {
+    const toggleId = event.target.getAttribute("data-toggle");
+    const deleteId = event.target.getAttribute("data-delete");
+    if (toggleId) {
+      const enabled = event.target.getAttribute("data-enabled") !== "true";
+      const res = await api("/admin/experts/schedules/" + toggleId, { method: "PATCH", headers: authHeaders(true), body: JSON.stringify({ enabled }) });
+      if (res.ok) loadSchedules();
+    }
+    if (deleteId) {
+      const res = await api("/admin/experts/schedules/" + deleteId, { method: "DELETE", headers: authHeaders() });
+      if (res.ok) loadSchedules();
+    }
+  });
+
+  document.getElementById("refreshSchedules").addEventListener("click", loadSchedules);
+  document.getElementById("refreshAppointments").addEventListener("click", loadAppointments);
+
+  loadHealth();
+  loadSchedules();
+  loadAppointments();
 </script>
 </body>
 </html>

@@ -24,6 +24,9 @@ public class AppointmentEntity {
     @Column(nullable = false, length = 128)
     private String email;
 
+    @Column(name = "owner_username", length = 128)
+    private String ownerUsername;
+
     @Column(nullable = false)
     private LocalDate date;
 
@@ -67,6 +70,14 @@ public class AppointmentEntity {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getOwnerUsername() {
+        return ownerUsername;
+    }
+
+    public void setOwnerUsername(String ownerUsername) {
+        this.ownerUsername = ownerUsername;
     }
 
     public LocalDate getDate() {
