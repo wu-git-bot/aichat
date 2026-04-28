@@ -2,7 +2,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/aichat?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_unicode_ci}
     username: ${DB_USER:root}
-    password: fuck520c
+    password: 
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -19,8 +19,8 @@ spring:
   ai:
     dashscope:
       agent:
-        app-id: d8cd5f81725542739d3a898dff4d9044
-      api-key: sk-08e63f7e59aa496e82897dd6c849d544
+        app-id: 
+      api-key: 
 
 app:
   security:
